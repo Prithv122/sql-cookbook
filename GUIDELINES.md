@@ -17,10 +17,10 @@ Python 3.13 · DuckDB (embedded, no server) · pytest · ruff · uv · GitHub Ac
 
 ## Acceptance criteria
 
-- [ ] Recipes cover: window functions, recursive CTEs, gaps-and-islands, sessionization, pivots
-- [ ] Every recipe is runnable AND tested — expected results asserted, not eyeballed
-- [ ] Seeded, deterministic synthetic dataset built by a script in the repo
-- [ ] CLI runs any recipe against the warehouse and prints the result
+- [x] Recipes cover: window functions, recursive CTEs, gaps-and-islands, sessionization, pivots
+- [x] Every recipe is runnable AND tested — expected results asserted, not eyeballed
+- [x] Seeded, deterministic synthetic dataset built by a script in the repo
+- [x] CLI runs any recipe against the warehouse and prints the result
 - [ ] Ship gate passes (`/ship`)
 
 ## Project-specific notes
@@ -29,3 +29,5 @@ Python 3.13 · DuckDB (embedded, no server) · pytest · ruff · uv · GitHub Ac
   dataset is generated locally from a fixed seed. `.env.example` deliberately deleted.
 - Dataset is **synthetic**. Any number in the README must say so.
 - Local pytest needs `--basetemp=<scratchpad>/pt` (sandbox blocks `%TEMP%`). Never in `pyproject.toml`.
+- The loader renders SQL literals rather than binding parameters — deliberate, measured,
+  ~85x faster per row on this machine. See NOTES.md before "fixing" it.
