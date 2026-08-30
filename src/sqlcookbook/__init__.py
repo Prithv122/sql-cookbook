@@ -1,6 +1,3 @@
-"""sql-cookbook.
-
-Rename this package to something meaningful during scaffolding.
-"""
+"""sql-cookbook: tested SQL patterns against a seeded synthetic DuckDB warehouse."""
 
 __version__ = "0.1.0"
