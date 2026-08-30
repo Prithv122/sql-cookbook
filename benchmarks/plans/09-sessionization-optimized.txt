@@ -1,0 +1,241 @@
+┌─────────────────────────────────────┐
+│┌───────────────────────────────────┐│
+││    Query Profiling Information    ││
+│└───────────────────────────────────┘│
+└─────────────────────────────────────┘
+EXPLAIN ANALYZE -- Benchmark: 09-sessionization -- Variant: optimized -- Note: two windows over one ordering -- LAG for the gap, cumulative SUM for the id. --   Recipe 09 is this query plus a four-customer sample filter.  WITH flagged AS (     SELECT         event_id,         customer_id,         event_ts,         CASE             WHEN LAG(event_ts) OVER w IS NULL THEN 1             WHEN event_ts - LAG(event_ts) OVER w > INTERVAL 30 MINUTE THEN 1             ELSE 0         END AS starts_session     FROM page_events     WINDOW w AS (PARTITION BY customer_id ORDER BY event_ts, event_id) ),  numbered AS (     SELECT         event_id,         customer_id,         event_ts,         CAST(             SUM(starts_session) OVER (                 PARTITION BY customer_id                 ORDER BY event_ts, event_id                 ROWS UNBOUNDED PRECEDING             ) AS BIGINT         ) AS session_number     FROM flagged )  SELECT     customer_id,     session_number,     MIN(event_ts) AS session_start,     MAX(event_ts) AS session_end,     COUNT(*)      AS events,     DATE_DIFF('second', MIN(event_ts), MAX(event_ts)) AS duration_seconds FROM numbered GROUP BY customer_id, session_number ORDER BY customer_id, session_number; 
+┌────────────────────────────────────────────────┐
+│┌──────────────────────────────────────────────┐│
+││              Total Time: 0.0165s             ││
+│└──────────────────────────────────────────────┘│
+└────────────────────────────────────────────────┘
+┌───────────────────────────┐
+│           QUERY           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│      EXPLAIN_ANALYZE      │
+│    ────────────────────   │
+│                           │
+│           0 rows          │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_decompress_integ│
+│     ral_integer(#0, 1)    │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #4            │
+│             #5            │
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│          ORDER_BY         │
+│    ────────────────────   │
+│  numbered.customer_id ASC │
+│numbered.session_number ASC│
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_compress_integra│
+│     l_usmallint(#0, 1)    │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #4            │
+│             #5            │
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│        customer_id        │
+│       session_number      │
+│       session_start       │
+│        session_end        │
+│           events          │
+│      duration_seconds     │
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_decompress_integ│
+│     ral_integer(#0, 1)    │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│       HASH_GROUP_BY       │
+│    ────────────────────   │
+│          Groups:          │
+│             #0            │
+│             #1            │
+│                           │
+│        Aggregates:        │
+│          min(#2)          │
+│          max(#3)          │
+│        count_star()       │
+│                           │
+│                           │
+│                           │
+│         2,218 rows        │
+│           0.01s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│        customer_id        │
+│       session_number      │
+│          event_ts         │
+│          event_ts         │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_compress_integra│
+│     l_usmallint(#0, 1)    │
+│             #1            │
+│             #2            │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│        customer_id        │
+│          event_ts         │
+│       session_number      │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│             #0            │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│           WINDOW          │
+│    ────────────────────   │
+│        Projections:       │
+│ sum(starts_session) OVER  │
+│ (PARTITION BY customer_id │
+│    ORDER BY event_ts ASC  │
+│  NULLS LAST, event_id ASC │
+│   NULLS LAST ROWS BETWEEN │
+│   UNBOUNDED PRECEDING AND │
+│        CURRENT ROW)       │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.03s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│          event_id         │
+│        customer_id        │
+│          event_ts         │
+│       starts_session      │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│             #0            │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #3            │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│           WINDOW          │
+│    ────────────────────   │
+│        Projections:       │
+│    LAG(event_ts) OVER     │
+│ (PARTITION BY customer_id │
+│    ORDER BY event_ts ASC  │
+│  NULLS LAST, event_id ASC │
+│         NULLS LAST)       │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.02s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         TABLE_SCAN        │
+│    ────────────────────   │
+│           Table:          │
+│ warehouse.main.page_events│
+│                           │
+│   Type: Sequential Scan   │
+│                           │
+│        Projections:       │
+│          event_id         │
+│        customer_id        │
+│          event_ts         │
+│                           │
+│                           │
+│                           │
+│        12,301 rows        │
+│           0.00s           │
+└───────────────────────────┘
+

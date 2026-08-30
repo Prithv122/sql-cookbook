@@ -1,0 +1,297 @@
+┌─────────────────────────────────────┐
+│┌───────────────────────────────────┐│
+││    Query Profiling Information    ││
+│└───────────────────────────────────┘│
+└─────────────────────────────────────┘
+EXPLAIN ANALYZE -- Benchmark: 09-sessionization -- Variant: naive -- Note: the same rule expressed with correlated subqueries instead of windows -- once --   to find the previous event, once more to number the sessions by counting the --   session starts at or before each row. Both correlated predicates carry the same --   (event_ts, event_id) tiebreaker as the window ORDER BY, without which the two --   variants would disagree wherever a timestamp repeats.  WITH events AS (     SELECT event_id, customer_id, event_ts FROM page_events ),  with_prev AS (     SELECT         e.event_id,         e.customer_id,         e.event_ts,         (             SELECT MAX(prior.event_ts)             FROM events prior             WHERE prior.customer_id = e.customer_id               AND (prior.event_ts, prior.event_id) < (e.event_ts, e.event_id)         ) AS prev_ts     FROM events e ),  starts AS (     SELECT         event_id,         customer_id,         event_ts,         CASE             WHEN prev_ts IS NULL THEN 1             WHEN event_ts - prev_ts > INTERVAL 30 MINUTE THEN 1             ELSE 0         END AS starts_session     FROM with_prev ),  numbered AS (     SELECT         s.event_id,         s.customer_id,         s.event_ts,         CAST((             SELECT COUNT(*)             FROM starts earlier             WHERE earlier.customer_id = s.customer_id               AND earlier.starts_session = 1               AND (earlier.event_ts, earlier.event_id) <= (s.event_ts, s.event_id)         ) AS BIGINT) AS session_number     FROM starts s )  SELECT     customer_id,     session_number,     MIN(event_ts) AS session_start,     MAX(event_ts) AS session_end,     COUNT(*)      AS events,     DATE_DIFF('second', MIN(event_ts), MAX(event_ts)) AS duration_seconds FROM numbered GROUP BY customer_id, session_number ORDER BY customer_id, session_number; 
+┌────────────────────────────────────────────────┐
+│┌──────────────────────────────────────────────┐│
+││              Total Time: 0.0553s             ││
+│└──────────────────────────────────────────────┘│
+└────────────────────────────────────────────────┘
+┌─────────────────┐
+│      QUERY      │
+└────────┬────────┘
+┌────────┴────────┐
+│ EXPLAIN_ANALYZE │
+│    ──────────   │
+│                 │
+│      0 rows     │
+│      0.00s      │
+└────────┬────────┘
+┌────────┴────────┐
+│       CTE       │
+│    ──────────   │
+│    CTE Name:    │
+│      events     │
+│                 │
+│   Table Index:  │
+│        0        ├─────────┐
+│                 │         │
+│                 │         │
+│                 │         │
+│      0 rows     │         │
+│      0.00s      │         │
+└────────┬────────┘         │
+┌────────┴────────┐┌────────┴────────┐
+│    TABLE_SCAN   ││       CTE       │
+│    ──────────   ││    ──────────   │
+│      Table:     ││    CTE Name:    │
+│  warehouse.main ││      starts     │
+│   .page_events  ││                 │
+│                 ││   Table Index:  │
+│      Type:      ││        2        │
+│ Sequential Scan ││                 │
+│                 ││                 │
+│   Projections:  ││                 ├─────────────────────────────────────────────────────────────────────────────────────┐
+│     event_id    ││                 │                                                                                     │
+│   customer_id   ││      0.00s      │                                                                                     │
+│     event_ts    ││                 │                                                                                     │
+│                 ││                 │                                                                                     │
+│                 ││                 │                                                                                     │
+│                 ││                 │                                                                                     │
+│   12,301 rows   ││      0 rows     │                                                                                     │
+│      0.00s      ││     (0.00s)     │                                                                                     │
+└─────────────────┘└────────┬────────┘                                                                                     │
+                   ┌────────┴────────┐                                                                            ┌────────┴────────┐
+                   │    PROJECTION   │                                                                            │     ORDER_BY    │
+                   │    ──────────   │                                                                            │    ──────────   │
+                   │     event_id    │                                                                            │     numbered    │
+                   │   customer_id   │                                                                            │ .customer_id ASC│
+                   │     event_ts    │                                                                            │     numbered    │
+                   │  starts_session │                                                                            │ .session_number │
+                   │                 │                                                                            │        ASC      │
+                   │                 │                                                                            │                 │
+                   │                 │                                                                            │                 │
+                   │                 │                                                                            │                 │
+                   │      0.00s      │                                                                            │    2,218 rows   │
+                   │     (0.00s)     │                                                                            │      0.00s      │
+                   └────────┬────────┘                                                                            └────────┬────────┘
+                   ┌────────┴────────┐                                                                            ┌────────┴────────┐
+                   │ LEFT_DELIM_JOIN │                                                                            │    PROJECTION   │
+                   │    ──────────   │                                                                            │    ──────────   │
+                   │    Join Type:   │                                                                            │   customer_id   │
+                   │       LEFT      │                                                                            │  session_number │
+                   │                 │                                                                            │  session_start  │
+                   │   Conditions:   │                                                                            │   session_end   │
+                   │ event_id IS NOT │                                                                            │      events     │
+                   │   DISTINCT FROM │                                                                            │ duration_seconds│
+                   │     event_id    │                                                                            │                 │
+                   │ event_ts IS NOT │                                                                            │                 │
+                   │   DISTINCT FROM │                                                                            │                 │
+                   │     event_ts    ├─────────┬────────────────────────────────────────────────────────┐         │                 │
+                   │  customer_id IS │         │                                                        │         │      0.00s      │
+                   │   NOT DISTINCT  │         │                                                        │         │                 │
+                   │ FROM customer_id│         │                                                        │         │                 │
+                   │                 │         │                                                        │         │                 │
+                   │   Delim Index:  │         │                                                        │         │                 │
+                   │        1        │         │                                                        │         │                 │
+                   │                 │         │                                                        │         │                 │
+                   │                 │         │                                                        │         │                 │
+                   │                 │         │                                                        │         │                 │
+                   │      0 rows     │         │                                                        │         │    2,218 rows   │
+                   │      0.00s      │         │                                                        │         │     (0.00s)     │
+                   └────────┬────────┘         │                                                        │         └────────┬────────┘
+                   ┌────────┴────────┐┌────────┴────────┐                                      ┌────────┴────────┐┌────────┴────────┐
+                   │     CTE_SCAN    ││    HASH_JOIN    │                                      │  HASH_GROUP_BY  ││  HASH_GROUP_BY  │
+                   │    ──────────   ││    ──────────   │                                      │    ──────────   ││    ──────────   │
+                   │    CTE Index:   ││    Join Type:   │                                      │     Groups:     ││     Groups:     │
+                   │        0        ││       LEFT      │                                      │        #0       ││        #0       │
+                   │                 ││                 │                                      │        #2       ││        #1       │
+                   │                 ││   Conditions:   │                                      │        #1       ││                 │
+                   │                 ││ event_id IS NOT │                                      │                 ││   Aggregates:   │
+                   │                 ││   DISTINCT FROM │                                      │                 ││     min(#2)     │
+                   │      0.00s      ││     event_id    │                                      │                 ││     max(#3)     │
+                   │                 ││ event_ts IS NOT │                                      │                 ││   count_star()  │
+                   │                 ││   DISTINCT FROM ├─────────┐                            │      0.01s      ││                 │
+                   │                 ││     event_ts    │         │                            │                 ││                 │
+                   │                 ││  customer_id IS │         │                            │                 ││                 │
+                   │                 ││   NOT DISTINCT  │         │                            │                 ││                 │
+                   │                 ││ FROM customer_id│         │                            │                 ││      0.01s      │
+                   │                 ││                 │         │                            │                 ││                 │
+                   │                 ││                 │         │                            │                 ││                 │
+                   │                 ││                 │         │                            │                 ││                 │
+                   │   12,301 rows   ││   12,301 rows   │         │                            │   12,301 rows   ││    2,218 rows   │
+                   │     (0.00s)     ││      0.00s      │         │                            │     (0.01s)     ││     (0.01s)     │
+                   └─────────────────┘└────────┬────────┘         │                            └─────────────────┘└────────┬────────┘
+                                      ┌────────┴────────┐┌────────┴────────┐                                      ┌────────┴────────┐
+                                      │ COLUMN_DATA_SCAN││    PROJECTION   │                                      │    PROJECTION   │
+                                      │                 ││    ──────────   │                                      │    ──────────   │
+                                      │                 ││  max(event_ts)  │                                      │   customer_id   │
+                                      │      0.00s      ││     event_id    │                                      │  session_number │
+                                      │                 ││     event_ts    │                                      │     event_ts    │
+                                      │                 ││   customer_id   │                                      │     event_ts    │
+                                      │                 ││                 │                                      │                 │
+                                      │                 ││                 │                                      │                 │
+                                      │                 ││                 │                                      │                 │
+                                      │   12,301 rows   ││   11,901 rows   │                                      │   12,301 rows   │
+                                      │     (0.00s)     ││      0.00s      │                                      │      0.00s      │
+                                      └─────────────────┘└────────┬────────┘                                      └────────┬────────┘
+                                                         ┌────────┴────────┐                                      ┌────────┴────────┐
+                                                         │  HASH_GROUP_BY  │                                      │ LEFT_DELIM_JOIN │
+                                                         │    ──────────   │                                      │    ──────────   │
+                                                         │     Groups:     │                                      │    Join Type:   │
+                                                         │        #0       │                                      │      SINGLE     │
+                                                         │        #1       │                                      │                 │
+                                                         │        #2       │                                      │   Conditions:   │
+                                                         │                 │                                      │ event_id IS NOT │
+                                                         │   Aggregates:   │                                      │   DISTINCT FROM │
+                                                         │     max(#3)     │                                      │     event_id    │
+                                                         │                 │                                      │ event_ts IS NOT │
+                                                         │                 │                                      │   DISTINCT FROM │
+                                                         │                 │                                      │     event_ts    ├─────────┬───────────────────────────────────────────────────────────────────────────┐
+                                                         │                 │                                      │  customer_id IS │         │                                                                           │
+                                                         │      0.03s      │                                      │   NOT DISTINCT  │         │                                                                           │
+                                                         │                 │                                      │ FROM customer_id│         │                                                                           │
+                                                         │                 │                                      │                 │         │                                                                           │
+                                                         │                 │                                      │   Delim Index:  │         │                                                                           │
+                                                         │                 │                                      │        2        │         │                                                                           │
+                                                         │                 │                                      │                 │         │                                                                           │
+                                                         │                 │                                      │                 │         │                                                                           │
+                                                         │                 │                                      │                 │         │                                                                           │
+                                                         │   11,901 rows   │                                      │      0 rows     │         │                                                                           │
+                                                         │     (0.03s)     │                                      │      0.00s      │         │                                                                           │
+                                                         └────────┬────────┘                                      └────────┬────────┘         │                                                                           │
+                                                         ┌────────┴────────┐                                      ┌────────┴────────┐┌────────┴────────┐                                                         ┌────────┴────────┐
+                                                         │    PROJECTION   │                                      │     CTE_SCAN    ││    HASH_JOIN    │                                                         │  HASH_GROUP_BY  │
+                                                         │    ──────────   │                                      │    ──────────   ││    ──────────   │                                                         │    ──────────   │
+                                                         │     event_id    │                                      │    CTE Index:   ││    Join Type:   │                                                         │     Groups:     │
+                                                         │     event_ts    │                                      │        2        ││      SINGLE     │                                                         │        #0       │
+                                                         │   customer_id   │                                      │                 ││                 │                                                         │        #2       │
+                                                         │     event_ts    │                                      │                 ││   Conditions:   │                                                         │        #1       │
+                                                         │                 │                                      │                 ││ event_id IS NOT │                                                         │                 │
+                                                         │                 │                                      │                 ││   DISTINCT FROM │                                                         │                 │
+                                                         │                 │                                      │      0.00s      ││     event_id    │                                                         │                 │
+                                                         │                 │                                      │                 ││ event_ts IS NOT │                                                         │                 │
+                                                         │      0.00s      │                                      │                 ││   DISTINCT FROM ├─────────┐                                               │      0.01s      │
+                                                         │                 │                                      │                 ││     event_ts    │         │                                               │                 │
+                                                         │                 │                                      │                 ││  customer_id IS │         │                                               │                 │
+                                                         │                 │                                      │                 ││   NOT DISTINCT  │         │                                               │                 │
+                                                         │                 │                                      │                 ││ FROM customer_id│         │                                               │                 │
+                                                         │                 │                                      │                 ││                 │         │                                               │                 │
+                                                         │                 │                                      │                 ││                 │         │                                               │                 │
+                                                         │                 │                                      │                 ││                 │         │                                               │                 │
+                                                         │   241,760 rows  │                                      │   12,301 rows   ││   12,301 rows   │         │                                               │   24,602 rows   │
+                                                         │     (0.00s)     │                                      │     (0.00s)     ││      0.00s      │         │                                               │     (0.01s)     │
+                                                         └────────┬────────┘                                      └─────────────────┘└────────┬────────┘         │                                               └─────────────────┘
+                                                         ┌────────┴────────┐                                                         ┌────────┴────────┐┌────────┴────────┐
+                                                         │    HASH_JOIN    │                                                         │ COLUMN_DATA_SCAN││    PROJECTION   │
+                                                         │    ──────────   │                                                         │                 ││    ──────────   │
+                                                         │    Join Type:   │                                                         │                 ││   CASE  WHEN (  │
+                                                         │      INNER      │                                                         │      0.00s      ││ (count_star() IS│
+                                                         │                 │                                                         │                 ││  NULL)) THEN (0)│
+                                                         │   Conditions:   │                                                         │                 ││  ELSE count_star│
+                                                         │  customer_id =  │                                                         │                 ││      () END     │
+                                                         │    customer_id  │                                                         │                 ││     event_id    │
+                                                         │ "row"(event_ts, ├─────────┐                                               │                 ││     event_ts    │
+                                                         │   event_id) <   │         │                                               │                 ││   customer_id   │
+                                                         │ "row"(event_ts, │         │                                               │                 ││                 │
+                                                         │     event_id)   │         │                                               │                 ││                 │
+                                                         │                 │         │                                               │                 ││                 │
+                                                         │                 │         │                                               │                 ││                 │
+                                                         │                 │         │                                               │                 ││      0.00s      │
+                                                         │   241,760 rows  │         │                                               │   12,301 rows   ││   12,301 rows   │
+                                                         │      0.05s      │         │                                               │     (0.00s)     ││     (0.00s)     │
+                                                         └────────┬────────┘         │                                               └─────────────────┘└────────┬────────┘
+                                                         ┌────────┴────────┐┌────────┴────────┐                                                         ┌────────┴────────┐
+                                                         │     CTE_SCAN    ││    DELIM_SCAN   │                                                         │    HASH_JOIN    │
+                                                         │    ──────────   ││    ──────────   │                                                         │    ──────────   │
+                                                         │    CTE Index:   ││   Delim Index:  │                                                         │    Join Type:   │
+                                                         │        0        ││        1        │                                                         │       LEFT      │
+                                                         │                 ││                 │                                                         │                 │
+                                                         │                 ││                 │                                                         │   Conditions:   │
+                                                         │                 ││                 │                                                         │ event_id IS NOT │
+                                                         │                 ││                 │                                                         │ DISTINCT FROM #0│
+                                                         │      0.00s      ││      0.00s      │                                                         │ event_ts IS NOT │
+                                                         │                 ││                 │                                                         │ DISTINCT FROM #1├─────────┐
+                                                         │                 ││                 │                                                         │  customer_id IS │         │
+                                                         │                 ││                 │                                                         │   NOT DISTINCT  │         │
+                                                         │                 ││                 │                                                         │      FROM #2    │         │
+                                                         │                 ││                 │                                                         │                 │         │
+                                                         │                 ││                 │                                                         │                 │         │
+                                                         │                 ││                 │                                                         │                 │         │
+                                                         │   12,301 rows   ││      0 rows     │                                                         │   12,301 rows   │         │
+                                                         │     (0.00s)     ││     (0.00s)     │                                                         │      0.00s      │         │
+                                                         └─────────────────┘└─────────────────┘                                                         └────────┬────────┘         │
+                                                                                                                                                        ┌────────┴────────┐┌────────┴────────┐
+                                                                                                                                                        │    DELIM_SCAN   ││  HASH_GROUP_BY  │
+                                                                                                                                                        │    ──────────   ││    ──────────   │
+                                                                                                                                                        │   Delim Index:  ││     Groups:     │
+                                                                                                                                                        │        2        ││        #0       │
+                                                                                                                                                        │                 ││        #1       │
+                                                                                                                                                        │                 ││        #2       │
+                                                                                                                                                        │                 ││                 │
+                                                                                                                                                        │                 ││   Aggregates:   │
+                                                                                                                                                        │      0.00s      ││   count_star()  │
+                                                                                                                                                        │                 ││                 │
+                                                                                                                                                        │                 ││                 │
+                                                                                                                                                        │                 ││                 │
+                                                                                                                                                        │      0 rows     ││   12,301 rows   │
+                                                                                                                                                        │     (0.00s)     ││      0.01s      │
+                                                                                                                                                        └─────────────────┘└────────┬────────┘
+                                                                                                                                                                           ┌────────┴────────┐
+                                                                                                                                                                           │    PROJECTION   │
+                                                                                                                                                                           │    ──────────   │
+                                                                                                                                                                           │     event_id    │
+                                                                                                                                                                           │     event_ts    │
+                                                                                                                                                                           │   customer_id   │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │   49,136 rows   │
+                                                                                                                                                                           │      0.00s      │
+                                                                                                                                                                           └────────┬────────┘
+                                                                                                                                                                           ┌────────┴────────┐
+                                                                                                                                                                           │    HASH_JOIN    │
+                                                                                                                                                                           │    ──────────   │
+                                                                                                                                                                           │    Join Type:   │
+                                                                                                                                                                           │      INNER      │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │   Conditions:   │
+                                                                                                                                                                           │  customer_id =  │
+                                                                                                                                                                           │    customer_id  │
+                                                                                                                                                                           │ "row"(event_ts, ├─────────┐
+                                                                                                                                                                           │   event_id) <=  │         │
+                                                                                                                                                                           │ "row"(event_ts, │         │
+                                                                                                                                                                           │     event_id)   │         │
+                                                                                                                                                                           │                 │         │
+                                                                                                                                                                           │                 │         │
+                                                                                                                                                                           │                 │         │
+                                                                                                                                                                           │   49,136 rows   │         │
+                                                                                                                                                                           │      0.02s      │         │
+                                                                                                                                                                           └────────┬────────┘         │
+                                                                                                                                                                           ┌────────┴────────┐┌────────┴────────┐
+                                                                                                                                                                           │    PROJECTION   ││    DELIM_SCAN   │
+                                                                                                                                                                           │    ──────────   ││    ──────────   │
+                                                                                                                                                                           │        #0       ││   Delim Index:  │
+                                                                                                                                                                           │        #1       ││        2        │
+                                                                                                                                                                           │        #2       ││                 │
+                                                                                                                                                                           │                 ││                 │
+                                                                                                                                                                           │                 ││                 │
+                                                                                                                                                                           │                 ││                 │
+                                                                                                                                                                           │    2,218 rows   ││      0.00s      │
+                                                                                                                                                                           │      0.00s      ││     (0.00s)     │
+                                                                                                                                                                           └────────┬────────┘└─────────────────┘
+                                                                                                                                                                           ┌────────┴────────┐
+                                                                                                                                                                           │      FILTER     │
+                                                                                                                                                                           │    ──────────   │
+                                                                                                                                                                           │ (starts_session │
+                                                                                                                                                                           │       = 1)      │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │    2,218 rows   │
+                                                                                                                                                                           │      0.00s      │
+                                                                                                                                                                           └────────┬────────┘
+                                                                                                                                                                           ┌────────┴────────┐
+                                                                                                                                                                           │     CTE_SCAN    │
+                                                                                                                                                                           │    ──────────   │
+                                                                                                                                                                           │    CTE Index:   │
+                                                                                                                                                                           │        2        │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │                 │
+                                                                                                                                                                           │   12,301 rows   │
+                                                                                                                                                                           │      0.00s      │
+                                                                                                                                                                           └─────────────────┘
+

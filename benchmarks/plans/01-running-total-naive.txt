@@ -1,0 +1,178 @@
+┌─────────────────────────────────────┐
+│┌───────────────────────────────────┐│
+││    Query Profiling Information    ││
+│└───────────────────────────────────┘│
+└─────────────────────────────────────┘
+EXPLAIN ANALYZE -- Benchmark: 01-running-total -- Variant: naive -- Note: the pre-window-function idiom -- re-aggregate every earlier row of the same --   customer for each row. Correct, portable to any engine, and quadratic in the --   number of orders per customer.  WITH order_value AS (     SELECT         o.order_id,         o.customer_id,         CAST(o.order_ts AS DATE)         AS order_date,         SUM(oi.quantity * oi.unit_price) AS order_value     FROM orders o     JOIN order_items oi ON oi.order_id = o.order_id     WHERE o.status = 'completed'     GROUP BY o.order_id, o.customer_id, o.order_ts )  SELECT     ov.customer_id,     ov.order_id,     ov.order_date,     ov.order_value,     (         SELECT SUM(prior.order_value)         FROM order_value prior         WHERE prior.customer_id = ov.customer_id           AND (prior.order_date, prior.order_id) <= (ov.order_date, ov.order_id)     ) AS running_total FROM order_value ov ORDER BY ov.customer_id, ov.order_date, ov.order_id; 
+┌────────────────────────────────────────────────┐
+│┌──────────────────────────────────────────────┐│
+││              Total Time: 0.0330s             ││
+│└──────────────────────────────────────────────┘│
+└────────────────────────────────────────────────┘
+┌───────────────────────────┐
+│           QUERY           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│      EXPLAIN_ANALYZE      │
+│    ────────────────────   │
+│                           │
+│           0 rows          │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│            CTE            │
+│    ────────────────────   │
+│   CTE Name: order_value   │
+│       Table Index: 0      │
+│                           ├───────────────────────────────────────────┐
+│                           │                                           │
+│                           │                                           │
+│           0 rows          │                                           │
+│           0.00s           │                                           │
+└─────────────┬─────────────┘                                           │
+┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+│         PROJECTION        │                             │          ORDER_BY         │
+│    ────────────────────   │                             │    ────────────────────   │
+│          order_id         │                             │     ov.customer_id ASC    │
+│        customer_id        │                             │     ov.order_date ASC     │
+│         order_date        │                             │      ov.order_id ASC      │
+│        order_value        │                             │                           │
+│                           │                             │                           │
+│                           │                             │                           │
+│                           │                             │                           │
+│         2,485 rows        │                             │           0.01s           │
+│           0.00s           │                             │          (0.01s)          │
+└─────────────┬─────────────┘                             └─────────────┬─────────────┘
+┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+│         PROJECTION        │                             │         PROJECTION        │
+│    ────────────────────   │                             │    ────────────────────   │
+│__internal_decompress_integ│                             │        customer_id        │
+│     ral_integer(#0, 1)    │                             │          order_id         │
+│__internal_decompress_integ│                             │         order_date        │
+│     ral_integer(#1, 1)    │                             │        order_value        │
+│             #2            │                             │       running_total       │
+│             #3            │                             │                           │
+│                           │                             │                           │
+│                           │                             │                           │
+│                           │                             │                           │
+│         2,485 rows        │                             │           0.00s           │
+│           0.00s           │                             │          (0.00s)          │
+└─────────────┬─────────────┘                             └─────────────┬─────────────┘
+┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+│       HASH_GROUP_BY       │                             │      RIGHT_DELIM_JOIN     │
+│    ────────────────────   │                             │    ────────────────────   │
+│          Groups:          │                             │      Join Type: RIGHT     │
+│             #0            │                             │                           │
+│             #1            │                             │        Conditions:        │
+│             #2            │                             │  order_id IS NOT DISTINCT │
+│                           │                             │        FROM order_id      │
+│    Aggregates: sum(#3)    │                             │ order_date IS NOT DISTINCT│
+│                           │                             │       FROM order_date     │
+│                           │                             │     customer_id IS NOT    ├──────────────┬──────────────────────────────────────────────────────────────────────────────────────┐
+│                           │                             │  DISTINCT FROM customer_id│              │                                                                                      │
+│                           │                             │                           │              │                                                                                      │
+│           0.00s           │                             │       Delim Index: 1      │              │                                                                                      │
+│                           │                             │                           │              │                                                                                      │
+│                           │                             │                           │              │                                                                                      │
+│                           │                             │                           │              │                                                                                      │
+│         2,485 rows        │                             │           0 rows          │              │                                                                                      │
+│          (0.00s)          │                             │           0.04s           │              │                                                                                      │
+└─────────────┬─────────────┘                             └─────────────┬─────────────┘              │                                                                                      │
+┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐┌─────────────┴─────────────┐                                                          ┌─────────────┴─────────────┐
+│         PROJECTION        │                             │          CTE_SCAN         ││         HASH_JOIN         │                                                          │       HASH_GROUP_BY       │
+│    ────────────────────   │                             │    ────────────────────   ││    ────────────────────   │                                                          │    ────────────────────   │
+│          order_id         │                             │        CTE Index: 0       ││      Join Type: RIGHT     │                                                          │          Groups:          │
+│        customer_id        │                             │                           ││                           │                                                          │             #0            │
+│          order_ts         │                             │                           ││        Conditions:        │                                                          │             #2            │
+│ (CAST(quantity AS DECIMAL │                             │                           ││  order_id IS NOT DISTINCT │                                                          │             #1            │
+│   (18,0)) * unit_price)   │                             │                           ││        FROM order_id      │                                                          │                           │
+│                           │                             │           0.00s           ││ order_date IS NOT DISTINCT│                                                          │                           │
+│                           │                             │                           ││       FROM order_date     ├───────────────────────────────────────────┐              │                           │
+│                           │                             │                           ││     customer_id IS NOT    │                                           │              │                           │
+│                           │                             │                           ││  DISTINCT FROM customer_id│                                           │              │           0.02s           │
+│           0.00s           │                             │                           ││                           │                                           │              │                           │
+│                           │                             │                           ││                           │                                           │              │                           │
+│                           │                             │                           ││                           │                                           │              │                           │
+│         7,432 rows        │                             │         2,485 rows        ││         2,485 rows        │                                           │              │         2,485 rows        │
+│          (0.00s)          │                             │          (0.00s)          ││           0.00s           │                                           │              │          (0.02s)          │
+└─────────────┬─────────────┘                             └───────────────────────────┘└─────────────┬─────────────┘                                           │              └───────────────────────────┘
+┌─────────────┴─────────────┐                                                          ┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+│         PROJECTION        │                                                          │         PROJECTION        │                             │         DUMMY_SCAN        │
+│    ────────────────────   │                                                          │    ────────────────────   │                             │    ────────────────────   │
+│             #0            │                                                          │      sum(order_value)     │                             │                           │
+│             #1            │                                                          │          order_id         │                             │                           │
+│__internal_compress_integra│                                                          │         order_date        │                             │           0.00s           │
+│     l_usmallint(#2, 1)    │                                                          │        customer_id        │                             │                           │
+│__internal_compress_integra│                                                          │                           │                             │                           │
+│     l_usmallint(#3, 1)    │                                                          │                           │                             │                           │
+│             #4            │                                                          │                           │                             │                           │
+│                           │                                                          │                           │                             │                           │
+│                           │                                                          │           0.00s           │                             │                           │
+│                           │                                                          │                           │                             │                           │
+│         7,432 rows        │                                                          │         2,485 rows        │                             │           0 rows          │
+│           0.00s           │                                                          │          (0.00s)          │                             │          (0.00s)          │
+└─────────────┬─────────────┘                                                          └─────────────┬─────────────┘                             └───────────────────────────┘
+┌─────────────┴─────────────┐                                                          ┌─────────────┴─────────────┐
+│         HASH_JOIN         │                                                          │       HASH_GROUP_BY       │
+│    ────────────────────   │                                                          │    ────────────────────   │
+│      Join Type: INNER     │                                                          │          Groups:          │
+│                           │                                                          │             #0            │
+│        Conditions:        │                                                          │             #1            │
+│    order_id = order_id    │                                                          │             #2            │
+│                           ├──────────────┐                                           │                           │
+│                           │              │                                           │    Aggregates: sum(#3)    │
+│                           │              │                                           │                           │
+│                           │              │                                           │                           │
+│           0.00s           │              │                                           │                           │
+│         7,432 rows        │              │                                           │         2,485 rows        │
+│          (0.00s)          │              │                                           │           0.05s           │
+└─────────────┬─────────────┘              │                                           └─────────────┬─────────────┘
+┌─────────────┴─────────────┐┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+│         TABLE_SCAN        ││         TABLE_SCAN        │                             │         PROJECTION        │
+│    ────────────────────   ││    ────────────────────   │                             │    ────────────────────   │
+│           Table:          ││           Table:          │                             │          order_id         │
+│ warehouse.main.order_items││   warehouse.main.orders   │                             │         order_date        │
+│                           ││                           │                             │        customer_id        │
+│   Type: Sequential Scan   ││   Type: Sequential Scan   │                             │        order_value        │
+│                           ││                           │                             │                           │
+│        Projections:       ││        Projections:       │                             │                           │
+│          order_id         ││          order_id         │                             │                           │
+│          quantity         ││        customer_id        │                             │                           │
+│         unit_price        ││          order_ts         │                             │           0.00s           │
+│                           ││                           │                             │                           │
+│      Dynamic Filters:     ││          Filters:         │                             │                           │
+│ optional: order_id>=2 AND ││     status='completed'    │                             │                           │
+│  optional: order_id<=3000 ││                           │                             │                           │
+│                           ││                           │                             │                           │
+│                           ││                           │                             │                           │
+│                           ││                           │                             │                           │
+│         8,996 rows        ││           0.00s           │                             │        17,803 rows        │
+│           0.00s           ││          (0.00s)          │                             │          (0.00s)          │
+└───────────────────────────┘└───────────────────────────┘                             └─────────────┬─────────────┘
+                                                                                       ┌─────────────┴─────────────┐
+                                                                                       │         HASH_JOIN         │
+                                                                                       │    ────────────────────   │
+                                                                                       │      Join Type: INNER     │
+                                                                                       │                           │
+                                                                                       │        Conditions:        │
+                                                                                       │ customer_id = customer_id │
+                                                                                       │ "row"(order_date, order_id│
+                                                                                       │   ) <= "row"(order_date,  ├──────────────┐
+                                                                                       │          order_id)        │              │
+                                                                                       │                           │              │
+                                                                                       │                           │              │
+                                                                                       │                           │              │
+                                                                                       │        17,803 rows        │              │
+                                                                                       │           0.03s           │              │
+                                                                                       └─────────────┬─────────────┘              │
+                                                                                       ┌─────────────┴─────────────┐┌─────────────┴─────────────┐
+                                                                                       │          CTE_SCAN         ││         DELIM_SCAN        │
+                                                                                       │    ────────────────────   ││    ────────────────────   │
+                                                                                       │        CTE Index: 0       ││       Delim Index: 1      │
+                                                                                       │                           ││                           │
+                                                                                       │                           ││                           │
+                                                                                       │                           ││                           │
+                                                                                       │         2,485 rows        ││           0 rows          │
+                                                                                       │           0.00s           ││           0.00s           │
+                                                                                       └───────────────────────────┘└───────────────────────────┘
+

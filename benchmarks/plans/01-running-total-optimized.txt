@@ -1,0 +1,219 @@
+┌─────────────────────────────────────┐
+│┌───────────────────────────────────┐│
+││    Query Profiling Information    ││
+│└───────────────────────────────────┘│
+└─────────────────────────────────────┘
+EXPLAIN ANALYZE -- Benchmark: 01-running-total -- Variant: optimized -- Note: one pass, one window. Recipe 01 is this query plus a sample filter.  WITH order_value AS (     SELECT         o.order_id,         o.customer_id,         CAST(o.order_ts AS DATE)         AS order_date,         SUM(oi.quantity * oi.unit_price) AS order_value     FROM orders o     JOIN order_items oi ON oi.order_id = o.order_id     WHERE o.status = 'completed'     GROUP BY o.order_id, o.customer_id, o.order_ts )  SELECT     customer_id,     order_id,     order_date,     order_value,     SUM(order_value) OVER (         PARTITION BY customer_id         ORDER BY order_date, order_id         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW     ) AS running_total FROM order_value ORDER BY customer_id, order_date, order_id; 
+┌────────────────────────────────────────────────┐
+│┌──────────────────────────────────────────────┐│
+││              Total Time: 0.0183s             ││
+│└──────────────────────────────────────────────┘│
+└────────────────────────────────────────────────┘
+┌───────────────────────────┐
+│           QUERY           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│      EXPLAIN_ANALYZE      │
+│    ────────────────────   │
+│                           │
+│           0 rows          │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_decompress_integ│
+│     ral_integer(#0, 1)    │
+│__internal_decompress_integ│
+│     ral_integer(#1, 1)    │
+│             #2            │
+│             #3            │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│          ORDER_BY         │
+│    ────────────────────   │
+│order_value.customer_id ASC│
+│ order_value.order_date ASC│
+│  order_value.order_id ASC │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_compress_integra│
+│     l_usmallint(#0, 1)    │
+│__internal_compress_integra│
+│     l_usmallint(#1, 1)    │
+│             #2            │
+│             #3            │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│        customer_id        │
+│          order_id         │
+│         order_date        │
+│        order_value        │
+│       running_total       │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│             #0            │
+│             #1            │
+│             #2            │
+│             #3            │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│           WINDOW          │
+│    ────────────────────   │
+│        Projections:       │
+│   sum(order_value) OVER   │
+│ (PARTITION BY customer_id │
+│   ORDER BY order_date ASC │
+│  NULLS LAST, order_id ASC │
+│   NULLS LAST ROWS BETWEEN │
+│   UNBOUNDED PRECEDING AND │
+│        CURRENT ROW)       │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.05s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│          order_id         │
+│        customer_id        │
+│         order_date        │
+│        order_value        │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_decompress_integ│
+│     ral_integer(#0, 1)    │
+│__internal_decompress_integ│
+│     ral_integer(#1, 1)    │
+│             #2            │
+│             #3            │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│       HASH_GROUP_BY       │
+│    ────────────────────   │
+│          Groups:          │
+│             #0            │
+│             #1            │
+│             #2            │
+│                           │
+│    Aggregates: sum(#3)    │
+│                           │
+│                           │
+│                           │
+│         2,485 rows        │
+│           0.01s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│          order_id         │
+│        customer_id        │
+│          order_ts         │
+│ (CAST(quantity AS DECIMAL │
+│   (18,0)) * unit_price)   │
+│                           │
+│                           │
+│                           │
+│         7,432 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│             #0            │
+│             #1            │
+│__internal_compress_integra│
+│     l_usmallint(#2, 1)    │
+│__internal_compress_integra│
+│     l_usmallint(#3, 1)    │
+│             #4            │
+│                           │
+│                           │
+│                           │
+│         7,432 rows        │
+│           0.00s           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         HASH_JOIN         │
+│    ────────────────────   │
+│      Join Type: INNER     │
+│                           │
+│        Conditions:        │
+│    order_id = order_id    ├──────────────┐
+│                           │              │
+│                           │              │
+│                           │              │
+│         7,432 rows        │              │
+│           0.00s           │              │
+└─────────────┬─────────────┘              │
+┌─────────────┴─────────────┐┌─────────────┴─────────────┐
+│         TABLE_SCAN        ││         TABLE_SCAN        │
+│    ────────────────────   ││    ────────────────────   │
+│           Table:          ││           Table:          │
+│ warehouse.main.order_items││   warehouse.main.orders   │
+│                           ││                           │
+│   Type: Sequential Scan   ││   Type: Sequential Scan   │
+│                           ││                           │
+│        Projections:       ││        Projections:       │
+│          order_id         ││          order_id         │
+│          quantity         ││        customer_id        │
+│         unit_price        ││          order_ts         │
+│                           ││                           │
+│      Dynamic Filters:     ││          Filters:         │
+│ optional: order_id>=2 AND ││     status='completed'    │
+│  optional: order_id<=3000 ││                           │
+│                           ││                           │
+│                           ││                           │
+│                           ││                           │
+│         8,996 rows        ││           0.00s           │
+│           0.00s           ││          (0.00s)          │
+└───────────────────────────┘└───────────────────────────┘
+
