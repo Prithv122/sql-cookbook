@@ -1,0 +1,78 @@
+{
+  "columns": [
+    {
+      "name": "category",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "product_name",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "order_count",
+      "type": "BIGINT"
+    },
+    {
+      "name": "row_number_tiebroken",
+      "type": "BIGINT"
+    },
+    {
+      "name": "rank_with_gaps",
+      "type": "BIGINT"
+    },
+    {
+      "name": "dense_rank_no_gaps",
+      "type": "BIGINT"
+    }
+  ],
+  "rows": [
+    [
+      "Audio",
+      "Lumen AUD-6",
+      27,
+      1,
+      1,
+      1
+    ],
+    [
+      "Audio",
+      "Zenith AUD-4",
+      22,
+      2,
+      2,
+      2
+    ],
+    [
+      "Audio",
+      "Flux AUD-1",
+      20,
+      3,
+      3,
+      3
+    ],
+    [
+      "Audio",
+      "Flux AUD-5",
+      20,
+      4,
+      3,
+      3
+    ],
+    [
+      "Audio",
+      "Lumen AUD-2",
+      14,
+      5,
+      5,
+      4
+    ],
+    [
+      "Audio",
+      "Ridge AUD-3",
+      14,
+      6,
+      5,
+      4
+    ]
+  ]
+}

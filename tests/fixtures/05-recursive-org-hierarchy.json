@@ -1,0 +1,131 @@
+{
+  "columns": [
+    {
+      "name": "employee_id",
+      "type": "INTEGER"
+    },
+    {
+      "name": "name",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "title",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "depth",
+      "type": "INTEGER"
+    },
+    {
+      "name": "reporting_path",
+      "type": "VARCHAR"
+    }
+  ],
+  "rows": [
+    [
+      1,
+      "Chen Quinn",
+      "CEO",
+      1,
+      "Chen Quinn"
+    ],
+    [
+      5,
+      "Chen Gupta",
+      "VP",
+      2,
+      "Chen Quinn > Chen Gupta"
+    ],
+    [
+      9,
+      "Farhan Ahuja",
+      "Manager",
+      3,
+      "Chen Quinn > Chen Gupta > Farhan Ahuja"
+    ],
+    [
+      13,
+      "Rohan Fernandes",
+      "Manager",
+      3,
+      "Chen Quinn > Chen Gupta > Rohan Fernandes"
+    ],
+    [
+      4,
+      "Divya Rossi",
+      "VP",
+      2,
+      "Chen Quinn > Divya Rossi"
+    ],
+    [
+      8,
+      "Hugo Lindqvist",
+      "Manager",
+      3,
+      "Chen Quinn > Divya Rossi > Hugo Lindqvist"
+    ],
+    [
+      12,
+      "Quentin Mehta",
+      "Manager",
+      3,
+      "Chen Quinn > Divya Rossi > Quentin Mehta"
+    ],
+    [
+      3,
+      "Lucas Dubois",
+      "VP",
+      2,
+      "Chen Quinn > Lucas Dubois"
+    ],
+    [
+      11,
+      "Omar Okafor",
+      "Manager",
+      3,
+      "Chen Quinn > Lucas Dubois > Omar Okafor"
+    ],
+    [
+      7,
+      "Rohan Dubois",
+      "Manager",
+      3,
+      "Chen Quinn > Lucas Dubois > Rohan Dubois"
+    ],
+    [
+      15,
+      "Yusuf Jensen",
+      "Manager",
+      3,
+      "Chen Quinn > Lucas Dubois > Yusuf Jensen"
+    ],
+    [
+      2,
+      "Rohan Iyer",
+      "VP",
+      2,
+      "Chen Quinn > Rohan Iyer"
+    ],
+    [
+      6,
+      "Meera Hansen",
+      "Manager",
+      3,
+      "Chen Quinn > Rohan Iyer > Meera Hansen"
+    ],
+    [
+      10,
+      "Sofia Gupta",
+      "Manager",
+      3,
+      "Chen Quinn > Rohan Iyer > Sofia Gupta"
+    ],
+    [
+      14,
+      "Wei Ueda",
+      "Manager",
+      3,
+      "Chen Quinn > Rohan Iyer > Wei Ueda"
+    ]
+  ]
+}
