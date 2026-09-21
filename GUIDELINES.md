@@ -21,7 +21,7 @@ Python 3.13 · DuckDB (embedded, no server) · pytest · ruff · uv · GitHub Ac
 - [x] Every recipe is runnable AND tested — expected results asserted, not eyeballed
 - [x] Seeded, deterministic synthetic dataset built by a script in the repo
 - [x] CLI runs any recipe against the warehouse and prints the result
-- [x] Ship gate passes (`/ship`)
+- [x] Ship gate passes
 
 ## Project-specific notes
 
